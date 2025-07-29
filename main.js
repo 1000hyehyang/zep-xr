@@ -14,6 +14,7 @@ let quizInterval = 5000; // 5초마다 퀴즈 시작
 let quizStartTime = 0;
 let answeredPlayers = new Set(); // 답변한 플레이어들 추적
 let correctAnswers = []; // 정답자들 기록 (시간순)
+let uploadWidget = null; // 파일 업로드 위젯
 
 // 앱 시작 시 영단어 데이터 로드
 App.onStart.Add(function() {
@@ -49,6 +50,46 @@ function parseVocabCSV(csvText) {
     }
     
     return data;
+}
+
+// CSV 파일 업로드 처리 함수
+function handleCSVUpload(csvText, filename) {
+    try {
+        const parsedData = parseVocabCSV(csvText);
+        
+        if (parsedData.length === 0) {
+            return { success: false, message: "CSV 데이터가 올바르지 않습니다." };
+        }
+        
+        // Storage에 저장
+        const dataToStore = {
+            vocabData: parsedData,
+            lastUpdated: Date.now(),
+            uploadedBy: filename,
+            source: "upload"
+        };
+        App.setStorage(JSON.stringify(dataToStore));
+        
+        // 전역 변수 업데이트
+        vocabData = parsedData;
+        
+        App.sayToAll(`📚 ${parsedData.length}개의 단어가 업로드되었습니다!`, 0x00FF00);
+        
+        // 현재 퀴즈가 진행 중이면 종료 후 새 퀴즈 시작
+        if (currentQuiz) {
+            currentQuiz = null;
+            setTimeout(function() {
+                startQuiz();
+            }, 2000);
+        } else {
+            startQuiz();
+        }
+        
+        return { success: true, message: "업로드 성공!" };
+        
+    } catch (error) {
+        return { success: false, message: "CSV 파싱 중 오류가 발생했습니다." };
+    }
 }
 
 // 자동 퀴즈 시작 함수
@@ -146,7 +187,7 @@ function generateQuiz() {
     };
 }
 
-// 시간별 점수 계산 함수
+// 점수 계산 함수
 function calculateScore(answerTime) {
     const timeElapsed = answerTime - quizStartTime;
     const maxTime = 10000; // 10초
@@ -159,41 +200,41 @@ function calculateScore(answerTime) {
     return 0; // 시간 초과: 0점
 }
 
-// 정답자들에게 차등 점수 분배
+// 점수 분배 함수
 function distributeScores() {
     if (correctAnswers.length === 0) return;
     
-    // 시간순으로 정렬 (빠른 순)
+    // 시간순으로 정렬
     correctAnswers.sort((a, b) => a.time - b.time);
     
-    // 차등 점수 분배
-    const baseScore = 100;
+    // 점수 분배 (1등: 100점, 2등: 80점, 3등: 60점, 4등: 40점)
+    const scoreDistribution = [100, 80, 60, 40];
+    
     correctAnswers.forEach((answer, index) => {
+        const score = index < scoreDistribution.length ? scoreDistribution[index] : 20;
+        
+        // 플레이어 점수 업데이트
+        if (!quizScores[answer.playerId]) {
+            quizScores[answer.playerId] = { correct: 0, total: 0, totalScore: 0 };
+        }
+        
+        quizScores[answer.playerId].correct++;
+        quizScores[answer.playerId].total++;
+        quizScores[answer.playerId].totalScore += score;
+        
+        // 정답자에게 개인 메시지
         const player = App.getPlayerByID(answer.playerId);
         if (player) {
-            let score;
-            if (index === 0) score = baseScore; // 1등: 100점
-            else if (index === 1) score = 80;    // 2등: 80점
-            else if (index === 2) score = 60;    // 3등: 60점
-            else score = 40;                      // 4등 이후: 40점
-            
-            quizScores[answer.playerId].correct++;
-            quizScores[answer.playerId].totalScore += score;
-            
-            player.sendMessage(`정답입니다! ${index + 1}등으로 ${score}점을 획득했습니다!`);
+            player.sendMessage(`🎉 ${index + 1}등! +${score}점 획득!`);
         }
     });
     
-    // 정답자 순위 공개
+    // 전체 알림
     if (correctAnswers.length > 0) {
-        let rankMessage = "🏆 정답자 순위: ";
-        correctAnswers.forEach((answer, index) => {
-            const player = App.getPlayerByID(answer.playerId);
-            if (player && index < 3) { // 상위 3명만 표시
-                rankMessage += `${index + 1}.${player.name} `;
-            }
-        });
-        App.showCenterLabel(rankMessage, 0x00FF00);
+        const firstPlayer = App.getPlayerByID(correctAnswers[0].playerId);
+        if (firstPlayer) {
+            App.sayToAll(`🏆 ${firstPlayer.name}님이 1등으로 정답을 맞추셨습니다!`, 0x00FF00);
+        }
     }
 }
 
@@ -201,7 +242,7 @@ function distributeScores() {
 App.onJoinPlayer.Add(function(player) {
     player.sendMessage("🎓 영단어 퀴즈 시스템에 오신 것을 환영합니다!");
     player.sendMessage("5초마다 자동으로 퀴즈가 시작됩니다!");
-    player.sendMessage("2: 점수 확인 | 3: 순위 확인");
+    player.sendMessage("2: 점수 확인 | 3: 순위 확인 | 4: CSV 파일 업로드");
     
     // 플레이어 점수 초기화
     quizScores[player.id] = { correct: 0, total: 0, totalScore: 0 };
@@ -240,6 +281,30 @@ App.addOnKeyDown(51, function(player) {
     sortedScores.forEach((score, index) => {
         if (index < 5) { // 상위 5명만 표시
             player.sendMessage(`${index + 1}. ${score.name}: ${score.totalScore}점 (${score.correct}개 정답, 평균 ${score.averageScore}점)`);
+        }
+    });
+});
+
+// 4 키를 눌러 파일 업로드 위젯 열기
+App.addOnKeyDown(52, function(player) {
+    if (uploadWidget) {
+        uploadWidget.destroy();
+    }
+    
+    uploadWidget = player.showWidget("file_upload.html", "center", 600, 500);
+    
+    // 위젯 메시지 처리
+    uploadWidget.onMessage.Add(function(player, data) {
+        if (data.type === 'csv_upload') {
+            const result = handleCSVUpload(data.data, data.filename);
+            uploadWidget.sendMessage({
+                type: 'upload_result',
+                success: result.success,
+                message: result.message
+            });
+        } else if (data.type === 'close_widget') {
+            uploadWidget.destroy();
+            uploadWidget = null;
         }
     });
 });
