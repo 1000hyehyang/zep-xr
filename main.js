@@ -285,30 +285,50 @@ App.addOnKeyDown(51, function(player) {
     });
 });
 
-// 4 키를 눌러 파일 업로드 위젯 열기
-App.addOnKeyDown(52, function(player) {
-    if (uploadWidget) {
-        uploadWidget.destroy();
-    }
-    
-    // 위젯 위치 설정 (원하는 위치로 변경 가능)
-    const widgetPosition = "center";
-    uploadWidget = player.showWidget("file_upload.html", widgetPosition, 600, 500);
-    
-    // 위젯 메시지 처리
-    uploadWidget.onMessage.Add(function(player, data) {
-        if (data.type === 'csv_upload') {
-            const result = handleCSVUpload(data.data, data.filename);
-            uploadWidget.sendMessage({
-                type: 'upload_result',
-                success: result.success,
-                message: result.message
-            });
-        } else if (data.type === 'close_widget') {
-            uploadWidget.destroy();
-            uploadWidget = null;
+// 오브젝트와 상호작용하여 파일 업로드 위젯 열기
+App.onObjectTouched.Add(function(player, x, y, tileID, obj) {
+    if (obj !== null) {
+        if (obj.type === 21) { // INTERACTION_WITH_ZEPSCRIPTS
+            // Number 값이 1인 경우에만 위젯 열기
+            if (obj.text === "1") {
+                if (uploadWidget) {
+                    uploadWidget.destroy();
+                }
+                
+                // 위젯 위치 설정 (Value 값으로 위치 조정 가능)
+                let widgetPosition = "middle"; // center 대신 middle 사용
+                if (obj.param1 === "top") widgetPosition = "top";
+                else if (obj.param1 === "bottom") widgetPosition = "bottom";
+                else if (obj.param1 === "middleleft") widgetPosition = "middleleft";
+                else if (obj.param1 === "middleright") widgetPosition = "middleright";
+                else if (obj.param1 === "topleft") widgetPosition = "topleft";
+                else if (obj.param1 === "topright") widgetPosition = "topright";
+                else if (obj.param1 === "bottomleft") widgetPosition = "bottomleft";
+                else if (obj.param1 === "bottomright") widgetPosition = "bottomright";
+                else if (obj.param1 === "popup") widgetPosition = "popup";
+                else if (obj.param1 === "sidebar") widgetPosition = "sidebar";
+                
+                uploadWidget = player.showWidget("file_upload.html", widgetPosition, 600, 500);
+                
+                // 위젯 메시지 처리
+                uploadWidget.onMessage.Add(function(player, data) {
+                    if (data.type === 'csv_upload') {
+                        const result = handleCSVUpload(data.data, data.filename);
+                        uploadWidget.sendMessage({
+                            type: 'upload_result',
+                            success: result.success,
+                            message: result.message
+                        });
+                    } else if (data.type === 'close_widget') {
+                        uploadWidget.destroy();
+                        uploadWidget = null;
+                    }
+                });
+                
+                App.sayToAll(`${player.name}님이 파일 업로드 위젯을 열었습니다.`, 0x00FF00);
+            }
         }
-    });
+    }
 });
 
 // 채팅 입력 처리
