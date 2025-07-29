@@ -291,7 +291,9 @@ App.addOnKeyDown(52, function(player) {
         uploadWidget.destroy();
     }
     
-    uploadWidget = player.showWidget("file_upload.html", "center", 600, 500);
+    // 위젯 위치 설정 (원하는 위치로 변경 가능)
+    const widgetPosition = "center";
+    uploadWidget = player.showWidget("file_upload.html", widgetPosition, 600, 500);
     
     // 위젯 메시지 처리
     uploadWidget.onMessage.Add(function(player, data) {
