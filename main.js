@@ -1,9 +1,5 @@
-// 간단한 영단어 퀴즈 시스템
-// CSV 형식: word,meaning
-// 예시: apple,사과
-
 // CSV 파일 URL (GitHub Pages 등에 업로드된 영단어 CSV 파일)
-const VOCAB_CSV_URL = "https://your-domain.com/elementary_english_word.csv";
+const VOCAB_CSV_URL = "https://raw.githubusercontent.com/1000hyehyang/zep-xr/main/elementary_english_word.csv";
 
 // 퀴즈 데이터를 저장할 변수
 let vocabData = [];
